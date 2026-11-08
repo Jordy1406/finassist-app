@@ -19,6 +19,9 @@ class Settings:
     chunk_max_words: int
     chunk_max_words_law: int
     chunk_overlap_words: int
+    top_k: int
+    min_score: float
+    num_ctx: int
 
 
 def get_settings() -> Settings:
@@ -32,4 +35,7 @@ def get_settings() -> Settings:
         chunk_max_words=int(os.getenv("CHUNK_MAX_WORDS", "300")),
         chunk_max_words_law=int(os.getenv("CHUNK_MAX_WORDS_LAW", "400")),
         chunk_overlap_words=int(os.getenv("CHUNK_OVERLAP_WORDS", "50")),
+        top_k=int(os.getenv("TOP_K", "4")),
+        min_score=float(os.getenv("MIN_SCORE", "0.5")),
+        num_ctx=int(os.getenv("NUM_CTX", "8192")),
     )
