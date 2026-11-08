@@ -148,7 +148,7 @@ book, no price band; WIB is a fixed UTC+7 offset (no daylight saving). The clock
 pytest
 ```
 
-95 unit tests run offline (49 of them cover every broker rule) (the LLM, embeddings and index are faked). The three P0-02 acceptance questions run
+95 unit tests run offline, 49 of them on broker rules; the LLM, embeddings and index are faked. The three P0-02 acceptance questions run
 against a real Ollama and index:
 
 ```bash
