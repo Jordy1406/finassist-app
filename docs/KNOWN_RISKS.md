@@ -28,6 +28,7 @@ for the next projects: P1 (AI app testing), P2 (LLM eval harness), P3 (agent tes
 | R15 | No rate limit or cost cap per session | Security / operations | Low | Hypothesis | P4, P5 |
 | R16 | Run-to-run variability makes single-run tests flaky | Quality / testing | Medium | Hypothesis | P1, P3 |
 | R17 | Claude provider path never exercised against the real API | Operations | Low | Observed | P0-04 follow-up, P5 |
+| R18 | Tables are lost when Wikipedia is converted to text | Data / grounding | Medium | Observed | P2 |
 
 R12-R15 map to the OWASP Top 10 for LLM Applications; P4 builds the full mapping.
 
@@ -41,6 +42,9 @@ R12-R15 map to the OWASP Top 10 for LLM Applications; P4 builds the full mapping
   Pasal 61. The Sukuk article was not among the retrieved chunks.
 - **Why it happens:** the right document is not retrieved (top-1 score 0.625 for the statute vs. the Sukuk article),
   and the 3B model answers from whatever context it gets instead of refusing.
+- **Still present with 30 documents:** after adding 20 articles (2026-11-08) the answer changed but stayed
+  unsupported: "Sukuk adalah surat utang ... yang telah dianggap aman dan stabil", citing the statute's Penjelasan
+  Umum, which never mentions sukuk. More documents alone did not fix it.
 - **How to test:** questions whose answer is in exactly one known document; assert the cited chunk supports the
   claim (LLM-as-judge for support, P1-04; faithfulness, P2-06).
 
@@ -61,8 +65,9 @@ R12-R15 map to the OWASP Top 10 for LLM Applications; P4 builds the full mapping
 - **How to test:** refusal accuracy on out-of-scope questions, measured over repeated runs (P1-03, P2-06).
 
 ### R05 — Statute crowds out the encyclopedia articles · Low · Observed
-- **Evidence:** the statute is ~50% of all words and 226 of 382 chunks; broad questions often retrieve statute
-  chunks first (e.g. the sukuk question).
+- **Evidence:** with 10 documents the statute was ~50% of all words and 226 of 382 chunks (59%); with 30
+  documents it is 36% of words and 226 of 533 chunks (42%). Broad questions still retrieve statute chunks first
+  (e.g. the sukuk question).
 - **How to test:** source distribution of retrieved chunks per question category (P2-10 error analysis).
 
 ### R06 — Outdated legal source · Medium · Observed
@@ -131,6 +136,13 @@ what the model proposes, not about bypassing the gate.
 - **Why plausible:** each `/agent` call may run up to 6 model rounds; there is no per-client limit, and with
   `AGENT_PROVIDER=anthropic` every round is a paid API call.
 - **How to test:** load test with repeated sessions (P4); spending limits and caching in CI (P5).
+
+### R18 — Tables are lost in the Wikipedia text · Medium · Observed
+- **Evidence:** MediaWiki plain-text extracts drop tables. `wiki_obligasi_negara_ritel.md` ends with "Seri ORI dan
+  besaran kupon yang telah diterbitkan adalah:" and no list; `wiki_indeks_lq45.md` has "Komponen — Efektif
+  Agustus-Oktober 2026" with no companies. Questions about ORI series, coupons or LQ45 members can only be answered
+  partly or wrongly.
+- **How to test:** golden cases whose answer lives in a table (P2-01); check refusal vs. partial answer.
 
 ## Quality of testing itself
 

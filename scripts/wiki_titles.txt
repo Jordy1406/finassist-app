@@ -1,0 +1,33 @@
+# Indonesian Wikipedia articles in the RAG corpus (CC BY-SA 4.0). One title per line.
+# Fetch missing ones with:  python scripts/fetch_wikipedia.py
+# --- batch 1 (2026-11-08, S1-10)
+Pasar modal
+Saham
+Obligasi
+Reksa dana
+Bursa Efek Indonesia
+Indeks Harga Saham Gabungan
+Dividen
+Penawaran umum perdana
+Sukuk
+# --- batch 2 (2026-11-08, P0 corpus to 30)
+Otoritas Jasa Keuangan
+Kustodian Sentral Efek Indonesia
+Kliring Penjaminan Efek Indonesia
+Badan Pengawas Pasar Modal dan Lembaga Keuangan
+Efek
+Waran
+Hak memesan efek terlebih dahulu
+Dana tukar-dagang
+Derivatif
+Opsi (keuangan)
+Kontrak berjangka
+Indeks LQ45
+Jakarta Islamic Index
+Kapitalisasi pasar
+Investasi
+Manajemen investasi
+Perusahaan efek
+Pialang saham
+Obligasi Negara Ritel
+Analisis fundamental

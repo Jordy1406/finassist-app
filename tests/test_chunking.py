@@ -157,10 +157,10 @@ def test_only_files_with_a_source_are_indexed(tmp_path):
     assert [p.name for p in source_documents(str(tmp_path))] == ["wiki_saham.md"]
 
 
-def test_real_docs_folder_indexes_exactly_the_ten_sources():
+def test_real_docs_folder_indexes_exactly_the_thirty_sources():
     from app.ingest import source_documents
     names = [p.name for p in source_documents("docs")]
-    assert len(names) == 10 and "KNOWN_RISKS.md" not in names and "SOURCES.md" not in names
+    assert len(names) == 30 and "KNOWN_RISKS.md" not in names and "SOURCES.md" not in names
 
 
 def test_link_only_wikipedia_sections_are_skipped():

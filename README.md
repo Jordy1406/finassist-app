@@ -53,8 +53,9 @@ python -m app.ingest            # chunk docs/*.md, embed with nomic-embed-text, 
 python -m app.ingest --dry-run  # chunk only and print counts per document
 ```
 
-Current corpus (10 public documents, see [docs/SOURCES.md](docs/SOURCES.md)): **382 chunks**, 768-dim embeddings,
-about 70 s to embed on a laptop GPU. `data/` is git-ignored; rebuild it after changing `docs/` or chunk settings.
+Current corpus (30 public documents: 29 Indonesian Wikipedia articles + UU 8/1995, see [docs/SOURCES.md](docs/SOURCES.md)):
+**533 chunks**, 768-dim embeddings, about 60 s to embed on a laptop GPU. Add Wikipedia articles by listing them in
+`scripts/wiki_titles.txt` and running `python scripts/fetch_wikipedia.py`. `data/` is git-ignored; rebuild it after changing `docs/` or chunk settings.
 
 ### Chunking
 
@@ -78,11 +79,11 @@ Each chunk stores `id`, `doc_id`, `title`, `source` URL, `license`, `section`, `
 ### Known weaknesses (left in on purpose)
 
 The full list with evidence, severity and test plan is in **[docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md)**
-(17 risks: grounding, retrieval, compliance, agent, security). Highlights:
+(18 risks: grounding, retrieval, compliance, agent, security). Highlights:
 
 - Definition lookups miss Pasal 1: "Apa yang dimaksud dengan afiliasi?" ranks Penjelasan Pasal 23/31 above
   Pasal 1, because the long list of definitions is split across windows and each window mixes many terms.
-- The statute is ~50% of all words, so legal text can crowd out the encyclopedia articles for broad questions.
+- The statute is 36% of all words (42% of chunks), so legal text can crowd out the encyclopedia articles for broad questions.
 - The statute is the original 1995 text; parts were amended by UU 4/2023 (P2SK).
 - Retrieval scores cannot separate in-scope from out-of-scope questions: "Bagaimana resep nasi goreng?" scores 0.650
   and "Berapa harga emas hari ini?" 0.698, above "Apa itu saham?" (0.626) and "Apa itu sukuk?" (0.625).
@@ -242,6 +243,6 @@ pytest -m integration   # RAG: answer with sources, refusal, disclaimer · agent
 - [x] Known risks backlog: [docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md) (P0-06)
 
 Next steps:
-1. Grow the corpus from 10 to 30 public documents (P0 minimum).
-2. README for recruiters with an architecture diagram (U-06), then interview practice (U-07), to close P0.
-3. P1: test strategy for this non-deterministic system, starting from the risks in KNOWN_RISKS.md.
+1. README for recruiters with an architecture diagram (U-06), then interview practice (U-07), to close P0.
+2. P1: test strategy for this non-deterministic system, starting from the risks in KNOWN_RISKS.md.
+3. Keep tables when fetching Wikipedia (R18) once P2 shows how much it matters.
