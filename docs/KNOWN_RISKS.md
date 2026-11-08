@@ -99,6 +99,13 @@ what the model proposes, not about bypassing the gate.
 - **Evidence:** "jual semua KOPX saya" → `place_order(quantity=1000)` without calling `get_portfolio` first (the
   account holds 500). Only the broker rule `INSUFFICIENT_SHARES` stopped it. With a smaller guess (e.g. 300) the
   order would have passed validation and gone to the user for confirmation with the wrong size.
+- **More evidence (agent-test-suite P3-02, 2026-11-08, reproduced in 2 of 2 runs):** the same failure appears whenever
+  the quantity is not a plain share count:
+  - "jual setengah KOPX saya" → `place_order(quantity=100)` without reading the portfolio (half of 500 is 250);
+  - "Saya punya 1 juta, belikan KOPX sebanyak mungkin" → `place_order(quantity=1000000)`: the budget in rupiah is sent
+    as a share count, no `get_quote`; blocked only by `ORDER_LIMIT`;
+  - "beli 70 lot BATX" → `place_order(quantity=70)`: lots not converted to shares, so the broker answers `LOT_SIZE`
+    instead of `ORDER_LIMIT` (no order placed, but for the wrong reason). "beli 2 lot TANX" is converted correctly.
 - **How to test:** scenarios with expected tool order (`get_portfolio` before `place_order`) and exact arguments (P3-01, P3-02).
 
 ### R10 — Agent gives implicit recommendations · High · Observed
