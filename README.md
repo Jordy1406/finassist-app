@@ -5,7 +5,7 @@ education documents (RAG), plus an agent that trades against a **mock** broker w
 Later projects (P1–P4) test, evaluate and red-team this system.
 
 > Status: P0, week 1. `POST /chat` answers in Bahasa Indonesia from retrieved public documents, with citations,
-> refusals and an investment disclaimer. Mock broker + agent come next (P0-03, P0-04).
+> refusals and an investment disclaimer. An in-memory mock broker is ready; the tool-using agent comes next (P0-04).
 
 ## Setup
 
@@ -108,13 +108,47 @@ Sample run (2026-11-08, `llama3.2:3b`, temperature 0):
 | Apa yang dimaksud dengan afiliasi? | false | Narrow answer from Penjelasan Pasal 31, misses the Pasal 1 definition |
 | Apa itu sukuk? | false | **Wrong**: describes a warrant and cites UU Pasal 61; the Sukuk article is not retrieved |
 
+## Mock broker (`app/broker.py`)
+
+In-memory and fully fictional; it is the system the agent (P0-04) will act on and P3 will assert against.
+
+| Ticker | Company (fictional) | Price (Rp) | Tick |
+|---|---|---:|---:|
+| KOPX | PT Kopi Nusantara Fiktif Tbk | 1,250 | 5 |
+| TANX | PT Tani Makmur Fiktif Tbk | 386 | 2 |
+| LAUX | PT Laut Biru Fiktif Tbk | 4,520 | 10 |
+| BATX | PT Batu Bara Fiktif Tbk | 7,850 | 25 |
+| DIGX | PT Digital Kita Fiktif Tbk | 142 | 1 |
+
+Starting account: Rp 100,000,000 cash and 500 KOPX at an average of Rp 1,200. Tools: `get_quote(ticker)`,
+`get_portfolio()`, `place_order(ticker, side, quantity, price=None)`, plus `order_history()` and `reset()`.
+
+`place_order` checks, in this order, and raises `BrokerError` with a stable `code` and an Indonesian message:
+
+| Code | Rule |
+|---|---|
+| `UNKNOWN_TICKER` | ticker not in the list above |
+| `INVALID_SIDE` | side is not `buy` / `sell` |
+| `INVALID_QUANTITY` | quantity is not a positive integer |
+| `LOT_SIZE` | quantity is not a multiple of 100 shares |
+| `INVALID_PRICE` | price is not a positive integer |
+| `TICK_SIZE` | price off the tick for its band (<200: 1, <500: 2, <2,000: 5, <5,000: 10, else 25) |
+| `MARKET_CLOSED` | outside Mon–Fri 09:00–15:50 WIB (configurable; end is exclusive) |
+| `ORDER_LIMIT` | order value above Rp 50,000,000 (configurable; the limit itself is allowed) |
+| `INSUFFICIENT_FUNDS` | buy value above cash |
+| `INSUFFICIENT_SHARES` | sell quantity above shares held |
+
+Malformed orders are reported as malformed even when the market is closed. A rejected order changes nothing.
+Simplifications: orders fill immediately and fully at the given price (default: last price); no fees, no order
+book, no price band; WIB is a fixed UTC+7 offset (no daylight saving). The clock is injectable for tests.
+
 ## Test
 
 ```bash
 pytest
 ```
 
-46 unit tests run offline (the LLM, embeddings and index are faked). The three P0-02 acceptance questions run
+95 unit tests run offline (49 of them cover every broker rule) (the LLM, embeddings and index are faked). The three P0-02 acceptance questions run
 against a real Ollama and index:
 
 ```bash
@@ -126,11 +160,13 @@ pytest -m integration   # in-scope answer with sources, out-of-scope refusal, re
 - [x] Skeleton: `/health`, `/chat` via Ollama
 - [x] Ingest + structure-aware chunking + local vector index (P0-01)
 - [x] RAG answers with citations, refusal and disclaimer (P0-02)
-- [ ] Mock broker + agent tools (P0-03, P0-04)
+- [x] In-memory mock broker with rule checks (P0-03)
+- [ ] Agent with tools and confirmation before orders (P0-04)
 - [ ] Docker Compose (P0-05)
 - [ ] Known risks backlog (P0-06)
 
 Next steps:
-1. P0-03: in-memory mock broker (fictional tickers, lot size 100, market hours, order limits) with unit tests.
-2. P0-04: `/agent` with `get_quote`, `get_portfolio`, `place_order` and explicit confirmation before orders.
+1. P0-04: `/agent` with `get_quote`, `get_portfolio`, `place_order`, explicit confirmation before orders and a
+   structured tool-call log that tests can read.
+2. P0-05: Docker Compose (app in a container, Ollama on the host via `host.docker.internal`).
 3. Grow the corpus from 10 to 30 public documents.
