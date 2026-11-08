@@ -22,6 +22,11 @@ class Settings:
     top_k: int
     min_score: float
     num_ctx: int
+    agent_provider: str
+    claude_model: str
+    claude_effort: str
+    agent_max_steps: int
+    broker_always_open: bool
 
 
 def get_settings() -> Settings:
@@ -38,4 +43,9 @@ def get_settings() -> Settings:
         top_k=int(os.getenv("TOP_K", "4")),
         min_score=float(os.getenv("MIN_SCORE", "0.5")),
         num_ctx=int(os.getenv("NUM_CTX", "8192")),
+        agent_provider=os.getenv("AGENT_PROVIDER", "ollama").lower(),
+        claude_model=os.getenv("CLAUDE_MODEL", "claude-opus-5-5"),
+        claude_effort=os.getenv("CLAUDE_EFFORT", "medium"),
+        agent_max_steps=int(os.getenv("AGENT_MAX_STEPS", "6")),
+        broker_always_open=os.getenv("BROKER_ALWAYS_OPEN", "false").lower() in ("1", "true", "yes"),
     )

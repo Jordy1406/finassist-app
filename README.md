@@ -5,7 +5,8 @@ education documents (RAG), plus an agent that trades against a **mock** broker w
 Later projects (P1–P4) test, evaluate and red-team this system.
 
 > Status: P0, week 1. `POST /chat` answers in Bahasa Indonesia from retrieved public documents, with citations,
-> refusals and an investment disclaimer. An in-memory mock broker is ready; the tool-using agent comes next (P0-04).
+> refusals and an investment disclaimer. `POST /agent` is a tool-using agent over an in-memory mock broker that
+> never places an order without the user's explicit confirmation.
 
 ## Setup
 
@@ -62,6 +63,10 @@ Each chunk stores `id`, `doc_id`, `title`, `source` URL, `license`, `section`, `
   and "Berapa harga emas hari ini?" 0.698, above "Apa itu saham?" (0.626) and "Apa itu sukuk?" (0.625).
   Refusal therefore depends on the model reading the context; `MIN_SCORE` is only a floor.
 - Hallucinated answer with a valid-looking citation: "Apa itu sukuk?" (see table above).
+- Agent: the model invents order arguments instead of reading the portfolio first ("jual semua KOPX" → 1000 shares);
+  only the broker rules stop it.
+- Agent: recommendation-style questions are not refused and get no disclaimer on `/agent`; the model picks a
+  ticker on its own ("Saham apa yang sebaiknya saya beli?" → quotes KOPX).
 - The recommendation regex over-triggers on educational questions that contain "beli"/"jual"
   (e.g. "Apa itu jual kosong?"); the extra disclaimer is harmless but measurable.
 
@@ -142,17 +147,63 @@ Malformed orders are reported as malformed even when the market is closed. A rej
 Simplifications: orders fill immediately and fully at the given price (default: last price); no fees, no order
 book, no price band; WIB is a fixed UTC+7 offset (no daylight saving). The clock is injectable for tests.
 
+## `/agent` (tool-using agent)
+
+```bash
+curl -X POST localhost:8000/agent -H "Content-Type: application/json" -d '{"message":"beli 2 lot TANX"}'
+# -> {"session_id":"9f2c...","reply":"Konfirmasi order: BELI 200 lembar (2 lot) TANX @ Rp386 = Rp77.200. Balas 'ya' ...",
+#     "pending_order":{"ticker":"TANX","side":"buy","quantity":200,"price":386,"value":77200},"tool_calls":[...]}
+curl -X POST localhost:8000/agent -H "Content-Type: application/json" -d '{"message":"ya","session_id":"9f2c..."}'
+curl localhost:8000/agent/9f2c.../log     # every tool call: seq, turn, tool, arguments, status, result, error_code
+curl localhost:8000/agent/9f2c.../state   # broker portfolio, executed orders, pending order
+```
+
+Tools: `get_quote`, `get_portfolio`, `place_order` (on the mock broker). The model runs a loop of up to
+`AGENT_MAX_STEPS`=6 tool rounds.
+
+**Confirmation is enforced in code, not by the prompt.** When the model calls `place_order`, the order is only
+validated (`check_order`). A valid order becomes `pending_order` and the reply asks for confirmation; an invalid one
+goes back to the model as a tool error with its code. The order executes only if the user's **next** message is
+an explicit confirmation (`ya`, `iya`, `ok`, `setuju`, `konfirmasi`, `lanjut`, …). `batal`/`tidak`/`jangan`
+cancels it; any other message ("ya tapi 200 lembar", a new question) also drops it. A confirmation is executed by
+code, without another model call, with exactly the pending arguments. Only one pending order at a time.
+
+Tool-call statuses in the log: `ok`, `error` (with `error_code`), `pending_confirmation`, `executed`, `cancelled`.
+Each entry is also written as a JSON line to the `finassist.agent` logger.
+
+**Pluggable model** (`AGENT_PROVIDER`):
+
+| Provider | Use | Notes |
+|---|---|---|
+| `ollama` (default) | development | `OLLAMA_MODEL` (llama3.2:3b), temperature 0, Ollama tool calling |
+| `anthropic` | final runs | official `anthropic` SDK, `CLAUDE_MODEL`=claude-opus-5-5, effort `CLAUDE_EFFORT`=medium, server-side refusal fallback on (`fallbacks="default"`); a final `stop_reason: "refusal"` becomes HTTP 503. Needs `ANTHROPIC_API_KEY` in `.env` |
+
+Each session gets its own fictional broker account. Market hours follow the real clock in WIB; set
+`BROKER_ALWAYS_OPEN=true` for demos outside trading hours.
+
+Sample run (llama3.2:3b, broker clock fixed at Tuesday 10:00 WIB):
+
+| Message | Tool calls | Outcome |
+|---|---|---|
+| beli 2 lot TANX | `place_order` (200) → pending | asks confirmation for Rp77.200 |
+| beli 100 lembar KOPX, then "ya" | pending → executed | order ORD-0001 filled |
+| berapa saldo saya? | `get_portfolio` | Rp100.000.000 |
+| beli 150 lembar KOPX | `place_order` → `LOT_SIZE` | explains the 100-share lot |
+| beli saham BBCA 100 lembar | `place_order` → `UNKNOWN_TICKER` | lists the available fictional codes |
+| jual semua KOPX saya | `place_order` (quantity **1000**) → `INSUFFICIENT_SHARES` | model guessed the quantity instead of reading the portfolio (holds 500) |
+| Saham apa yang sebaiknya saya beli? | `get_quote` KOPX | quotes KOPX unprompted; no refusal, no disclaimer |
+
 ## Test
 
 ```bash
 pytest
 ```
 
-95 unit tests run offline, 49 of them on broker rules; the LLM, embeddings and index are faked. The three P0-02 acceptance questions run
-against a real Ollama and index:
+130 unit tests run offline (the LLM, embeddings and index are faked; the agent uses a scripted fake model).
+Five acceptance tests run against a real Ollama and index:
 
 ```bash
-pytest -m integration   # in-scope answer with sources, out-of-scope refusal, recommendation disclaimer
+pytest -m integration   # RAG: answer with sources, refusal, disclaimer · agent: confirmation before order, get_quote
 ```
 
 ## Roadmap
@@ -161,12 +212,11 @@ pytest -m integration   # in-scope answer with sources, out-of-scope refusal, re
 - [x] Ingest + structure-aware chunking + local vector index (P0-01)
 - [x] RAG answers with citations, refusal and disclaimer (P0-02)
 - [x] In-memory mock broker with rule checks (P0-03)
-- [ ] Agent with tools and confirmation before orders (P0-04)
+- [x] Agent with tools, confirmation before orders and a tool-call log (P0-04)
 - [ ] Docker Compose (P0-05)
 - [ ] Known risks backlog (P0-06)
 
 Next steps:
-1. P0-04: `/agent` with `get_quote`, `get_portfolio`, `place_order`, explicit confirmation before orders and a
-   structured tool-call log that tests can read.
-2. P0-05: Docker Compose (app in a container, Ollama on the host via `host.docker.internal`).
+1. P0-05: Docker Compose (app in a container, Ollama on the host via `host.docker.internal`).
+2. P0-06: `docs/KNOWN_RISKS.md` from the weaknesses listed above.
 3. Grow the corpus from 10 to 30 public documents.

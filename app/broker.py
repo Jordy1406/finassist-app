@@ -120,7 +120,35 @@ class MockBroker:
         equity = sum(p["market_value"] for p in positions)
         return {"cash": self.cash, "positions": positions, "equity_value": equity, "total_value": self.cash + equity}
 
+    def check_order(self, ticker: str, side: str, quantity: int, price: int | None = None) -> dict:
+        """Run every rule without executing. Returns the normalised order, or raises BrokerError."""
+        t, side, quantity, price, value = self._validate(ticker, side, quantity, price)
+        return {"ticker": t, "side": side, "quantity": quantity, "price": price, "value": value}
+
     def place_order(self, ticker: str, side: str, quantity: int, price: int | None = None) -> dict:
+        t, side, quantity, price, value = self._validate(ticker, side, quantity, price)
+
+        if side == "buy":
+            self.cash -= value
+            pos = self.positions.get(t)
+            if pos:
+                pos.avg_price = (pos.shares * pos.avg_price + value) / (pos.shares + quantity)
+                pos.shares += quantity
+            else:
+                self.positions[t] = Position(t, quantity, float(price))
+        else:
+            self.cash += value
+            pos = self.positions[t]
+            pos.shares -= quantity
+            if pos.shares == 0:
+                del self.positions[t]
+
+        order = Order(f"ORD-{len(self.history) + 1:04d}", t, side, quantity, price, value,
+                      self._now().astimezone(JAKARTA).isoformat(timespec="seconds"))
+        self.history.append(order)
+        return {"status": "filled", **asdict(order)}
+
+    def _validate(self, ticker: str, side: str, quantity: int, price: int | None) -> tuple[str, str, int, int, int]:
         t = self._ticker(ticker)
         side = str(side).lower()
         if side not in ("buy", "sell"):
@@ -145,26 +173,7 @@ class MockBroker:
         held = self.positions.get(t).shares if t in self.positions else 0
         if side == "sell" and quantity > held:
             raise BrokerError("INSUFFICIENT_SHARES", f"Hanya memiliki {held} lembar {t}; tidak bisa menjual {quantity}.")
-
-        if side == "buy":
-            self.cash -= value
-            pos = self.positions.get(t)
-            if pos:
-                pos.avg_price = (pos.shares * pos.avg_price + value) / (pos.shares + quantity)
-                pos.shares += quantity
-            else:
-                self.positions[t] = Position(t, quantity, float(price))
-        else:
-            self.cash += value
-            pos = self.positions[t]
-            pos.shares -= quantity
-            if pos.shares == 0:
-                del self.positions[t]
-
-        order = Order(f"ORD-{len(self.history) + 1:04d}", t, side, quantity, price, value,
-                      self._now().astimezone(JAKARTA).isoformat(timespec="seconds"))
-        self.history.append(order)
-        return {"status": "filled", **asdict(order)}
+        return t, side, quantity, price, value
 
     def order_history(self) -> list[dict]:
         return [asdict(o) for o in self.history]

@@ -83,6 +83,13 @@ def test_reset_restores_starting_state():
     assert [p["ticker"] for p in b.get_portfolio()["positions"]] == ["KOPX"]
 
 
+def test_check_order_validates_without_executing():
+    b = broker_at()
+    assert b.check_order("tanx", "BUY", 200) == {"ticker": "TANX", "side": "buy", "quantity": 200, "price": 386, "value": 77_200}
+    assert b.cash == 100_000_000 and b.order_history() == []
+    assert error_code(b.check_order, "TANX", "buy", 150) == "LOT_SIZE"
+
+
 def test_rejected_order_changes_nothing():
     b = broker_at()
     before = (b.cash, b.get_portfolio(), b.order_history())
