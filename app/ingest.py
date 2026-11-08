@@ -217,8 +217,21 @@ def embed(texts: list[str], settings: Settings, batch: int = 32) -> list[list[fl
     return vectors
 
 
+def source_documents(docs_dir: str) -> list[Path]:
+    """Corpus files only: markdown with a `source:` in its front matter.
+
+    Project notes kept in docs/ (SOURCES.md, KNOWN_RISKS.md, ...) have no front matter and must never reach the index.
+    """
+    out = []
+    for p in sorted(Path(docs_dir).glob("*.md")):
+        meta, _ = parse_front_matter(p.read_text(encoding="utf-8"))
+        if meta.get("source"):
+            out.append(p)
+    return out
+
+
 def build_index(settings: Settings, dry_run: bool = False) -> list[Chunk]:
-    docs = sorted(p for p in Path(settings.docs_dir).glob("*.md") if p.name != "SOURCES.md")
+    docs = source_documents(settings.docs_dir)
     chunks: list[Chunk] = []
     for path in docs:
         doc_chunks = chunk_document(path, settings)

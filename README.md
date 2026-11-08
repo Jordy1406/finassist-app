@@ -75,7 +75,10 @@ Each chunk stores `id`, `doc_id`, `title`, `source` URL, `license`, `section`, `
 
 **Why not Chroma?** ~400 chunks fit in a JSON file and a brute-force cosine search; no extra dependency needed yet.
 
-### Known retrieval weaknesses (left in on purpose for P1–P2)
+### Known weaknesses (left in on purpose)
+
+The full list with evidence, severity and test plan is in **[docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md)**
+(17 risks: grounding, retrieval, compliance, agent, security). Highlights:
 
 - Definition lookups miss Pasal 1: "Apa yang dimaksud dengan afiliasi?" ranks Penjelasan Pasal 23/31 above
   Pasal 1, because the long list of definitions is split across windows and each window mixes many terms.
@@ -236,9 +239,9 @@ pytest -m integration   # RAG: answer with sources, refusal, disclaimer · agent
 - [x] In-memory mock broker with rule checks (P0-03)
 - [x] Agent with tools, confirmation before orders and a tool-call log (P0-04)
 - [x] Docker Compose: app container + index volume, Ollama on the host (P0-05)
-- [ ] Known risks backlog (P0-06)
+- [x] Known risks backlog: [docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md) (P0-06)
 
 Next steps:
-1. P0-06: `docs/KNOWN_RISKS.md` from the weaknesses listed above (targets for P1-P4).
-2. Grow the corpus from 10 to 30 public documents.
-3. README architecture diagram (U-06) to close P0.
+1. Grow the corpus from 10 to 30 public documents (P0 minimum).
+2. README for recruiters with an architecture diagram (U-06), then interview practice (U-07), to close P0.
+3. P1: test strategy for this non-deterministic system, starting from the risks in KNOWN_RISKS.md.

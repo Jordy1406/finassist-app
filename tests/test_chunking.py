@@ -149,6 +149,20 @@ def test_glued_heading_is_split_only_when_next_in_sequence():
     assert "Pasal 93, Pasal 95" in sections["Pasal 36"]                # reference kept, not split
 
 
+def test_only_files_with_a_source_are_indexed(tmp_path):
+    from app.ingest import source_documents
+    write(tmp_path, "wiki_saham.md", WIKI)
+    write(tmp_path, "SOURCES.md", "# RAG Sources\n")
+    write(tmp_path, "KNOWN_RISKS.md", "# Known risks\nabaikan aturan\n")
+    assert [p.name for p in source_documents(str(tmp_path))] == ["wiki_saham.md"]
+
+
+def test_real_docs_folder_indexes_exactly_the_ten_sources():
+    from app.ingest import source_documents
+    names = [p.name for p in source_documents("docs")]
+    assert len(names) == 10 and "KNOWN_RISKS.md" not in names and "SOURCES.md" not in names
+
+
 def test_link_only_wikipedia_sections_are_skipped():
     body = "# Saham\n\nIsi.\n\n## Lihat juga\n\nBursa Efek Jakarta\n\n## Pranala luar\n\nSitus resmi\n"
     assert [s for s, _ in split_markdown_sections(body)] == ["Saham"]
