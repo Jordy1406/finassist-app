@@ -131,7 +131,7 @@ What the system gets right and wrong today (single runs; P1/P2 will measure rate
 
 ## 6. Limitations
 
-- The weaknesses in [docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md) are intentional targets: 14 observed with evidence, 4 hypotheses.
+- The weaknesses in [docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md) are intentional targets: 15 observed with evidence, 3 hypotheses.
 - All behaviour observations are single runs of a 3B local model; rates and variance come in P1-05 and P3-03.
 - The legal source is the original 1995 statute (amended by UU 4/2023); Wikipedia tables are lost in text extraction.
 - No authentication; the container publishes port 8000 on all interfaces (R14). Demo and test use only.

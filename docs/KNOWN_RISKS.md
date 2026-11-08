@@ -26,7 +26,7 @@ for the next projects: P1 (AI app testing), P2 (LLM eval harness), P3 (agent tes
 | R13 | Direct prompt injection / system-prompt extraction | Security (LLM01, LLM07) | Medium | Observed | P4 |
 | R14 | No authentication; API published on all interfaces | Security | Medium | Observed | P4 |
 | R15 | No rate limit or cost cap per session | Security / operations | Low | Hypothesis | P4, P5 |
-| R16 | Run-to-run variability makes single-run tests flaky | Quality / testing | Medium | Hypothesis | P1, P3 |
+| R16 | Run-to-run variability makes single-run tests flaky | Quality / testing | Medium | Observed | P1, P3 |
 | R17 | Claude provider path never exercised against the real API | Operations | Low | Observed | P0-04 follow-up, P5 |
 | R18 | Tables are lost when Wikipedia is converted to text | Data / grounding | Medium | Observed | P2 |
 
@@ -149,9 +149,12 @@ what the model proposes, not about bypassing the gate.
 
 ## Quality of testing itself
 
-### R16 — Run-to-run variability · Medium · Hypothesis
-- **Why plausible:** temperature 0 reduces but does not remove variation (batching, hardware, model updates). All
-  observations above are single runs.
+### R16 — Run-to-run variability · Medium · Observed
+- **Evidence (ai-app-tests P1-05, 2026-11-08):** the 48-test suite run 5 times with one sample per case: 1 test changed
+  outcome — "Apa itu obligasi?" was **refused in 1 of 5 runs** although `wiki_obligasi.md` is in the corpus (a false
+  refusal), and answered correctly in the other 4. Single-run flaky rate 1/48 (2.1%), 1/24 of model-dependent tests.
+  Separately, "Apa itu sukuk?" produced a different answer text in run 1 than in runs 2-5 of the same repro.
+  Temperature 0 reduces variation but does not remove it.
 - **How to test:** run each case 5 times and report the flaky rate (P1-05); pass^k for agent scenarios (P3-03).
 
 ### R17 — Claude provider path never exercised for real · Low · Observed
