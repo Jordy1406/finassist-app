@@ -18,12 +18,21 @@ Python 3.12 (venv: `py -3.12 -m venv .venv`), FastAPI, pytest, Ollama (dev), Doc
 
 ## STRUKTUR
 ```
-app/      main.py (endpoint), config.py (settings dari env), llm.py (klien Ollama)
-tests/    pytest
+app/      main.py (endpoint /health /chat /agent), config.py (settings dari env), llm.py (Ollama chat/embed)
+          ingest.py (chunking + index), retrieval.py (top-k), rag.py (jawaban + sitasi + penolakan)
+          broker.py (mock broker + aturan), agent.py (loop tool + konfirmasi + log), agent_models.py (Ollama/Claude)
+          serve.py (entrypoint container)
+tests/    pytest (unit offline; `-m integration` butuh Ollama)
 docs/     dokumen publik untuk RAG + SOURCES.md
+data/     index.json hasil ingest (git-ignored; volume di Docker)
 ```
 
 ## CARA RUN
+Docker (satu perintah; Ollama tetap jalan di host):
+```bash
+docker compose up --build -d   # http://localhost:8000/health
+```
+Lokal tanpa Docker:
 ```bash
 python -m venv .venv
 # Windows: .venv\Scripts\activate   |  macOS/Linux: source .venv/bin/activate

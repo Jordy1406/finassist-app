@@ -1,0 +1,29 @@
+# FinAssist ID — one command: `docker compose up --build`
+#
+# Ollama runs on the HOST, not in a container:
+# - it uses the host GPU directly (GPU passthrough into Docker on Windows/WSL2 adds setup and drivers),
+# - the models (~2.3 GB) are already pulled on the host, so they are not downloaded or stored twice.
+# The app reaches it through host.docker.internal (built into Docker Desktop; mapped below for Linux).
+services:
+  app:
+    build: .
+    image: finassist-app:local
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # overrides .env, which points at localhost for running outside Docker
+      OLLAMA_HOST: ${OLLAMA_HOST_FOR_DOCKER:-http://host.docker.internal:11434}
+      # Market hours follow the real clock (WIB). For demos outside trading hours:
+      #   BROKER_ALWAYS_OPEN=true docker compose up -d   (or put it in .env)
+      BROKER_ALWAYS_OPEN: ${BROKER_ALWAYS_OPEN:-false}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - finassist-data:/app/data   # vector index survives restarts; delete the volume to rebuild it
+    restart: unless-stopped
+
+volumes:
+  finassist-data:

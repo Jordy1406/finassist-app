@@ -8,7 +8,29 @@ Later projects (P1–P4) test, evaluate and red-team this system.
 > refusals and an investment disclaimer. `POST /agent` is a tool-using agent over an in-memory mock broker that
 > never places an order without the user's explicit confirmation.
 
-## Setup
+## Quick start (Docker)
+
+Needs Docker and [Ollama](https://ollama.com) on the host with the two models pulled
+(`ollama pull llama3.2:3b` and `ollama pull nomic-embed-text`).
+
+```bash
+docker compose up --build -d     # first start builds the document index into a volume (~20-70 s)
+curl localhost:8000/health        # {"status":"ok"}
+```
+
+| Piece | Where | Why |
+|---|---|---|
+| API (`app`) | container `finassist-app:local`, port 8000, non-root user | one command to run, same on every machine |
+| Vector index | named volume `finassist-data` at `/app/data` | built once on first start, kept across restarts (`docker volume rm finassist-app_finassist-data` to rebuild) |
+| Ollama | **host**, reached via `host.docker.internal:11434` | uses the host GPU without Docker GPU passthrough, and the ~2.3 GB of models are not downloaded twice |
+
+The entrypoint (`python -m app.serve`) builds the index if it is missing, then starts uvicorn. If Ollama is not
+reachable at that moment the API still starts: `/health` and `/agent` work and `/chat` returns 503 until the index
+exists. Settings come from `.env` if present (optional); `OLLAMA_HOST` is overridden for the container.
+`BROKER_ALWAYS_OPEN=true docker compose up -d` lifts market hours for demos outside 09:00-15:50 WIB.
+Health check: `GET /health` every 15 s.
+
+## Setup (local, without Docker)
 
 ```bash
 python -m venv .venv
@@ -213,10 +235,10 @@ pytest -m integration   # RAG: answer with sources, refusal, disclaimer · agent
 - [x] RAG answers with citations, refusal and disclaimer (P0-02)
 - [x] In-memory mock broker with rule checks (P0-03)
 - [x] Agent with tools, confirmation before orders and a tool-call log (P0-04)
-- [ ] Docker Compose (P0-05)
+- [x] Docker Compose: app container + index volume, Ollama on the host (P0-05)
 - [ ] Known risks backlog (P0-06)
 
 Next steps:
-1. P0-05: Docker Compose (app in a container, Ollama on the host via `host.docker.internal`).
-2. P0-06: `docs/KNOWN_RISKS.md` from the weaknesses listed above.
-3. Grow the corpus from 10 to 30 public documents.
+1. P0-06: `docs/KNOWN_RISKS.md` from the weaknesses listed above (targets for P1-P4).
+2. Grow the corpus from 10 to 30 public documents.
+3. README architecture diagram (U-06) to close P0.
