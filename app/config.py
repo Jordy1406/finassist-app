@@ -1,7 +1,7 @@
 """Settings loaded from environment variables (and an optional .env file)."""
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from dotenv import load_dotenv
 
@@ -27,6 +27,11 @@ class Settings:
     claude_effort: str
     agent_max_steps: int
     broker_always_open: bool
+    # Security (P4-04). api_keys maps client name -> key; empty = auth disabled (local dev only).
+    api_keys: dict[str, str] = field(default_factory=dict)
+    max_sessions_per_client: int = 20
+    session_ttl_s: int = 3600
+    rate_limit_per_min: int = 120
 
 
 def get_settings() -> Settings:
@@ -48,4 +53,19 @@ def get_settings() -> Settings:
         claude_effort=os.getenv("CLAUDE_EFFORT", "medium"),
         agent_max_steps=int(os.getenv("AGENT_MAX_STEPS", "6")),
         broker_always_open=os.getenv("BROKER_ALWAYS_OPEN", "false").lower() in ("1", "true", "yes"),
+        api_keys=parse_api_keys(os.getenv("API_KEYS", "")),
+        max_sessions_per_client=int(os.getenv("MAX_SESSIONS_PER_CLIENT", "20")),
+        session_ttl_s=int(os.getenv("SESSION_TTL_S", "3600")),
+        rate_limit_per_min=int(os.getenv("RATE_LIMIT_PER_MIN", "120")),
     )
+
+
+def parse_api_keys(raw: str) -> dict[str, str]:
+    """`API_KEYS=alice:key1,bob:key2` -> {"alice": "key1", "bob": "key2"}. Keys must be at least 16 characters."""
+    out = {}
+    for item in filter(None, (p.strip() for p in raw.split(","))):
+        name, sep, key = item.partition(":")
+        if not sep or not name or len(key) < 16:
+            raise ValueError("API_KEYS entries must look like name:key with a key of at least 16 characters")
+        out[name] = key
+    return out

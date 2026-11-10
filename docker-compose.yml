@@ -19,6 +19,8 @@ services:
       # Market hours follow the real clock (WIB). For demos outside trading hours:
       #   BROKER_ALWAYS_OPEN=true docker compose up -d   (or put it in .env)
       BROKER_ALWAYS_OPEN: ${BROKER_ALWAYS_OPEN:-false}
+      # P4-04: set API_KEYS (in .env or the shell) to require an X-API-Key header; empty = unauthenticated dev mode
+      API_KEYS: ${API_KEYS:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

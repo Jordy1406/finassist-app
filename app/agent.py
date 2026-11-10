@@ -13,10 +13,12 @@ from __future__ import annotations
 import json
 import logging
 import re
+import time as _time
 import uuid
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, time, timezone
 
+from app import guard
 from app.agent_models import AgentModel, ToolCall, ToolResult, make_model
 from app.broker import LOT_SIZE, BrokerConfig, BrokerError, MockBroker
 from app.config import Settings
@@ -29,6 +31,7 @@ SYSTEM_PROMPT = """Kamu adalah FinAssist ID, asisten untuk akun broker MOCK beri
 - quantity di place_order dalam LEMBAR. 1 lot = 100 lembar, jadi "2 lot" berarti quantity 200.
 - Saat user meminta order, panggil place_order dengan argumen dari permintaannya. Sistem akan meminta konfirmasi
   user sebelum order dieksekusi. Jangan pernah mengatakan order sudah dieksekusi kecuali hasil tool berkata "filled".
+- Saat menyebut nominal Rupiah, salin persis teks dari field yang berakhiran _text di hasil tool.
 - Jangan memberi rekomendasi beli/jual. Jawab singkat dalam Bahasa Indonesia."""
 
 TOOLS = [
@@ -40,7 +43,7 @@ TOOLS = [
     },
     {
         "name": "get_portfolio",
-        "description": "Saldo kas, posisi saham dan nilai total akun mock.",
+        "description": "Saldo kas, posisi saham dan nilai total akun mock milik user sesi ini (tanpa argumen; akun lain tidak bisa diakses).",
         "parameters": {"type": "object", "properties": {}},
     },
     {
@@ -82,11 +85,19 @@ class AgentReply:
     reply: str
     pending_order: dict | None
     tool_calls: list[dict]
+    guard: str | None = None   # why the model's reply was replaced by a guard, if it was
+
+
+ALLOWED_ARGS = {t["name"]: set(t["parameters"]["properties"]) for t in TOOLS}
 
 
 class AgentSession:
-    def __init__(self, settings: Settings, model: AgentModel | None = None, broker: MockBroker | None = None):
-        self.id = uuid.uuid4().hex[:12]
+    def __init__(self, settings: Settings, model: AgentModel | None = None, broker: MockBroker | None = None,
+                 owner: str = "local"):
+        self.id = uuid.uuid4().hex          # 128-bit, not guessable (was 48-bit)
+        self.owner = owner
+        self.last_used = _time.monotonic()
+        self.guard: str | None = None
         self.settings = settings
         self.model = model or make_model(settings)
         self.broker = broker or MockBroker(_broker_config(settings))
@@ -97,6 +108,8 @@ class AgentSession:
     # --- public ---------------------------------------------------------------------
     def handle(self, message: str) -> AgentReply:
         self.turn += 1
+        self.last_used = _time.monotonic()
+        self.guard = None
         start = len(self.log)
 
         if self.pending is not None:
@@ -123,7 +136,12 @@ class AgentSession:
         for _ in range(self.settings.agent_max_steps):
             turn = self.model.step(SYSTEM_PROMPT, TOOLS)
             if not turn.tool_calls:
-                return turn.text.strip() or "Maaf, saya belum bisa menjawab permintaan itu."
+                text, reason = guard.check_reply(turn.text.strip(), SYSTEM_PROMPT)
+                if reason:
+                    self.guard = reason
+                    log.warning(json.dumps({"session": self.id, "guard": reason, "replaced": turn.text[:500]},
+                                           ensure_ascii=False))
+                return text or "Maaf, saya belum bisa menjawab permintaan itu."
 
             results, confirmation = [], None
             for call in turn.tool_calls:
@@ -138,11 +156,17 @@ class AgentSession:
 
     def _dispatch(self, call: ToolCall) -> tuple[dict, bool, str | None]:
         args = _coerce_ints(call.arguments, ("quantity", "price"))
+        unknown = sorted(set(args) - ALLOWED_ARGS[call.name]) if call.name in ALLOWED_ARGS else []
+        if unknown:
+            result = {"error": f"Argumen tidak dikenal untuk {call.name}: {', '.join(unknown)}. Tool ini hanya untuk "
+                               "akun user sesi ini; akun lain tidak bisa diakses.", "code": "UNKNOWN_ARGUMENT"}
+            self._log(call.name, args, "error", result, "UNKNOWN_ARGUMENT")
+            return result, True, None
         try:
             if call.name == "get_quote":
-                result = self.broker.get_quote(args.get("ticker", ""))
+                result = _with_rupiah_text(self.broker.get_quote(args.get("ticker", "")))
             elif call.name == "get_portfolio":
-                result = self.broker.get_portfolio()
+                result = _with_rupiah_text(self.broker.get_portfolio())
             elif call.name == "place_order":
                 if self.pending is not None:
                     result = {"status": "rejected", "reason": "Sudah ada order yang menunggu konfirmasi."}
@@ -188,29 +212,50 @@ class AgentSession:
         self._log("place_order", {k: order[k] for k in ("ticker", "side", "quantity", "price")}, status, result)
 
     def _reply(self, text: str, start: int) -> AgentReply:
-        return AgentReply(self.id, text, self.pending, [asdict(e) for e in self.log[start:]])
+        return AgentReply(self.id, text, self.pending, [asdict(e) for e in self.log[start:]], self.guard)
+
+
+class SessionLimit(Exception):
+    """No room for a new session without evicting another client's session."""
 
 
 class SessionStore:
-    """In-memory sessions (process-local; fine for a demo/test target)."""
+    """In-memory sessions, each owned by the client that created it (process-local; demo/test target).
+
+    P4-04 (MAN-04): sessions idle longer than SESSION_TTL_S are dropped; a client over MAX_SESSIONS_PER_CLIENT loses
+    its OWN oldest session; when the store is full a new session is refused (429), never made by evicting someone
+    else's.
+    """
 
     def __init__(self, max_sessions: int = 200):
         self.sessions: dict[str, AgentSession] = {}
         self.max_sessions = max_sessions
 
-    def get_or_create(self, session_id: str | None, settings: Settings) -> AgentSession:
+    def get_or_create(self, session_id: str | None, settings: Settings, owner: str = "local") -> AgentSession:
         if session_id:
-            if session_id not in self.sessions:
-                raise KeyError(session_id)
-            return self.sessions[session_id]
+            return self.get(session_id, owner)
+        self._purge_idle(settings.session_ttl_s)
+        mine = [s for s in self.sessions.values() if s.owner == owner]
+        if len(mine) >= settings.max_sessions_per_client:
+            oldest = min(mine, key=lambda s: s.last_used)
+            del self.sessions[oldest.id]
         if len(self.sessions) >= self.max_sessions:
-            self.sessions.pop(next(iter(self.sessions)))
-        session = AgentSession(settings)
+            raise SessionLimit("session store is full")
+        session = AgentSession(settings, owner=owner)
         self.sessions[session.id] = session
         return session
 
-    def get(self, session_id: str) -> AgentSession:
-        return self.sessions[session_id]
+    def get(self, session_id: str, owner: str | None = None) -> AgentSession:
+        """KeyError for an unknown session AND for another client's session (no hint that it exists)."""
+        s = self.sessions[session_id]
+        if owner is not None and s.owner != owner:
+            raise KeyError(session_id)
+        return s
+
+    def _purge_idle(self, ttl_s: int) -> None:
+        now = _time.monotonic()
+        for sid in [sid for sid, s in self.sessions.items() if now - s.last_used > ttl_s]:
+            del self.sessions[sid]
 
 
 def _broker_config(settings: Settings) -> BrokerConfig:
@@ -226,6 +271,27 @@ def _coerce_ints(args: dict, keys: tuple[str, ...]) -> dict:
         v = out.get(k)
         if isinstance(v, str) and re.fullmatch(r"\s*\d+\s*", v):
             out[k] = int(v)
+    return out
+
+
+def rupiah(value: float | int) -> str:
+    """125000 -> 'Rp125.000' (Indonesian thousands separator, no decimals)."""
+    return "Rp" + f"{round(value):,}".replace(",", ".")
+
+
+MONEY_FIELDS = ("cash", "equity_value", "total_value", "price", "avg_price", "last_price", "market_value", "unrealized_pl")
+
+
+def _with_rupiah_text(result: dict) -> dict:
+    """Add ready-to-read Rupiah strings next to every money field (P4-04, AUTO-02: the model misread 625000 as
+    Rp625.000.000)."""
+    out = dict(result)
+    for k in MONEY_FIELDS:
+        v = out.get(k)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            out[k + "_text"] = rupiah(v)
+    if isinstance(out.get("positions"), list):
+        out["positions"] = [_with_rupiah_text(p) for p in out["positions"]]
     return out
 
 

@@ -20,12 +20,12 @@ for the next projects: P1 (AI app testing), P2 (LLM eval harness), P3 (agent tes
 | R07 | Investment-advice detector misses most advice questions | Compliance | High | Observed | P1, P2 |
 | R08 | Detector over-triggers on educational questions | Compliance | Low | Observed | P1 |
 | R09 | Agent invents order arguments instead of reading the portfolio | Agent | High | Observed | P3 |
-| R10 | Agent gives implicit recommendations | Agent / compliance | High | Observed | P3, P4 |
+| R10 | Agent gives implicit recommendations | Agent / compliance | High | Mitigated on `/agent` (P4-04 advice guard; keyword-based) | P3, P4 |
 | R11 | Agent text may claim an action that did not happen | Agent | Medium | Hypothesis | P3 |
 | R12 | Indirect prompt injection through RAG documents | Security (OWASP LLM01) | High | Hypothesis | P4 |
-| R13 | Direct prompt injection / system-prompt extraction | Security (LLM01, LLM07) | Medium | Observed | P4 |
-| R14 | No authentication; API published on all interfaces | Security | Medium | Observed | P4 |
-| R15 | No rate limit or cost cap per session | Security / operations | Low | Hypothesis | P4, P5 |
+| R13 | Direct prompt injection / system-prompt extraction | Security (LLM01, LLM07) | Medium | Partially mitigated (P4-04 leak guard; tool schema still printable) | P4 |
+| R14 | No authentication; API published on all interfaces | Security | Medium | Mitigated when `API_KEYS` is set (P4-04); dev mode stays open | P4 |
+| R15 | No rate limit or cost cap per session | Security / operations | Low | Partially mitigated (P4-04 rate limit + session caps; no cost cap) | P4, P5 |
 | R16 | Run-to-run variability makes single-run tests flaky | Quality / testing | Medium | Observed | P1, P3 |
 | R17 | Claude provider path never exercised against the real API | Operations | Low | Observed | P0-04 follow-up, P5 |
 | R18 | Tables are lost when Wikipedia is converted to text | Data / grounding | Medium | Observed | P2 |
@@ -33,6 +33,16 @@ for the next projects: P1 (AI app testing), P2 (LLM eval harness), P3 (agent tes
 R12-R15 map to the OWASP Top 10 for LLM Applications; P4 builds the full mapping.
 
 ---
+
+## P4-04 fixes (2026-11-10)
+
+The P4 red team (repo `ai-redteam`) found, besides the risks below, a **session hijack** (any client could read a
+session and confirm its order), **session flooding** (200 anonymous sessions evicted everyone else's), the agent
+**reading "another account"** when given an id, and **portfolio amounts reported 1000× too high**. Fixes in
+`app/security.py`, `app/guard.py` and `app/agent.py` (README "Security controls"); retest: 12/12 manual attacks
+resisted (was 6/12). R10, R13, R14 and R15 are updated in the table above. Still open: R09, R12 provenance (a document
+labelled TEST is cited like the law), and two `/chat` grounding issues (claims taken from fake logs in the prompt with
+citations that do not support them; unreadable input answered with citations), which extend R01 and R04.
 
 ## Retrieval and grounding (`/chat`)
 

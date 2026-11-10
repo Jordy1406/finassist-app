@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/Jordy1406/finassist-app/actions/workflows/ci.yml/badge.svg)](https://github.com/Jordy1406/finassist-app/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
-![Tests](https://img.shields.io/badge/unit%20tests-132-informational)
+![Tests](https://img.shields.io/badge/unit%20tests-150-informational)
 
 A small AI system built **to be tested**: a Bahasa Indonesia assistant that answers capital-market questions from
 public documents (RAG) and an agent that places orders on a **mock** broker with fictional data.
@@ -81,7 +81,7 @@ uvicorn app.main:app --reload                         # http://localhost:8000/do
 **Tests.**
 
 ```bash
-pytest                   # 132 offline unit tests (model, embeddings and index faked)
+pytest                   # 150 offline unit tests (model, embeddings and index faked)
 pytest -m integration    # 5 acceptance tests against a real Ollama + index
 ```
 
@@ -94,8 +94,8 @@ Measured on 2026-11-08 on a laptop (i5-11400H, RTX 3050 4 GB), `llama3.2:3b` at 
 
 | Number | Value | Source |
 |---|---|---|
-| Unit tests passing | **132** (agent 34, broker 50, chunking 21, RAG 22, API 5) | `pytest -q` → `132 passed, 5 deselected` |
-| Integration tests passing | **5 / 5** | `pytest -m integration -q` → `5 passed, 132 deselected` |
+| Unit tests passing | **150** (agent 34, security 18, broker 50, chunking 21, RAG 22, API 5) | `pytest -q` → `150 passed, 5 deselected` |
+| Integration tests passing | **5 / 5** | `pytest -m integration -q` → `5 passed, 150 deselected` |
 | Corpus | **30 documents → 533 chunks**, 768-dim | `python -m app.ingest --dry-run` → `533 chunks from 30 documents` |
 | Statute share of the index | 42% of chunks, 36% of words | computed from `data/index.json` (226 of 533 chunks) |
 | Broker rules with their own error code | **10** | `app/broker.py` (`BrokerError` codes) |
@@ -134,7 +134,8 @@ What the system gets right and wrong today (single runs; P1/P2 will measure rate
 - The weaknesses in [docs/KNOWN_RISKS.md](docs/KNOWN_RISKS.md) are intentional targets: 15 observed with evidence, 3 hypotheses.
 - All behaviour observations are single runs of a 3B local model; rates and variance come in P1-05 and P3-03.
 - The legal source is the original 1995 statute (amended by UU 4/2023); Wikipedia tables are lost in text extraction.
-- No authentication; the container publishes port 8000 on all interfaces (R14). Demo and test use only.
+- Authentication is off unless `API_KEYS` is set (R14); without it the API is a local dev target only. The output
+  guards are keyword rules: paraphrased advice or a paraphrased system prompt can still get through.
 
 ## 7. Next steps
 
@@ -184,6 +185,24 @@ JSON lines on the `finassist.agent` logger.
 
 Each session has its own fictional broker account. Market hours follow the real clock in WIB;
 `BROKER_ALWAYS_OPEN=true` lifts them for demos.
+
+### Security controls (P4-04)
+
+Added after the P4 red-team findings (repo `ai-redteam`, not yet published).
+
+| Control | Finding | How |
+|---|---|---|
+| API key per client | MAN-01 session hijack | `API_KEYS=name:key,...` → every endpoint except `/health` needs `X-API-Key`; 401 otherwise (`app/security.py`) |
+| Sessions owned by their client | MAN-01 | `/agent`, `/log`, `/state` return 404 for another client's session; session ids are 128-bit |
+| Per-client session cap, idle expiry, no cross-client eviction | MAN-04 session flood | `MAX_SESSIONS_PER_CLIENT`=20 (a client only evicts its own oldest), `SESSION_TTL_S`=3600, full store → 429 |
+| Rate limit | MAN-04, R15 | `RATE_LIMIT_PER_MIN`=120 per client on `/chat` and `/agent` → 429 |
+| Advice guard on `/agent` replies | MAN-02 role-play advice | ticker + recommendation / price-direction wording (not negated) → fixed refusal with disclaimer (`app/guard.py`) |
+| System-prompt leak guard | MAN-03 prompt extraction | reply containing ≥ 2 distinctive prompt fragments → fixed refusal |
+| Strict tool arguments | AUTO-01 other accounts | arguments not in the tool schema → `UNKNOWN_ARGUMENT`, nothing read |
+| Rupiah text in tool results | AUTO-02 amounts ×1000 | every money field also as `*_text` (`"Rp100.625.000"`); the prompt says to copy those |
+
+A replaced reply is flagged in the response (`"guard": "investment_advice" | "system_prompt_leak"`) and logged.
+Without `API_KEYS` the API logs a warning at start-up and identifies clients by IP address.
 
 ### Mock broker
 

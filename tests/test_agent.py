@@ -190,12 +190,12 @@ def client(monkeypatch):
     monkeypatch.setattr(main, "sessions", store)
     original = store.get_or_create
 
-    def create(session_id, settings):
+    def create(session_id, settings, owner="local"):
         if session_id is None:
-            s = AgentSession(settings, model=ScriptedModel([BUY_KOPX]), broker=MockBroker(now=lambda: OPEN))
+            s = AgentSession(settings, model=ScriptedModel([BUY_KOPX]), broker=MockBroker(now=lambda: OPEN), owner=owner)
             store.sessions[s.id] = s
             return s
-        return original(session_id, settings)
+        return original(session_id, settings, owner)
 
     monkeypatch.setattr(store, "get_or_create", create)
     return TestClient(main.app)
