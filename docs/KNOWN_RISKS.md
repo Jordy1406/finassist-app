@@ -36,7 +36,7 @@ R12-R15 map to the OWASP Top 10 for LLM Applications; P4 builds the full mapping
 
 ## P4-04 fixes (2026-11-10)
 
-The P4 red team (repo `ai-redteam`) found, besides the risks below, a **session hijack** (any client could read a
+The P4 red team ([ai-redteam](https://github.com/Jordy1406/ai-redteam)) found, besides the risks below, a **session hijack** (any client could read a
 session and confirm its order), **session flooding** (200 anonymous sessions evicted everyone else's), the agent
 **reading "another account"** when given an id, and **portfolio amounts reported 1000× too high**. Fixes in
 `app/security.py`, `app/guard.py` and `app/agent.py` (README "Security controls"); retest: 12/12 manual attacks

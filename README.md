@@ -188,7 +188,7 @@ Each session has its own fictional broker account. Market hours follow the real 
 
 ### Security controls (P4-04)
 
-Added after the P4 red-team findings (repo `ai-redteam`, not yet published).
+Added after the P4 red-team findings in [ai-redteam](https://github.com/Jordy1406/ai-redteam) ([report](https://github.com/Jordy1406/ai-redteam/blob/main/docs/REDTEAM_REPORT.md), [retest](https://github.com/Jordy1406/ai-redteam/blob/main/docs/RETEST.md)).
 
 | Control | Finding | How |
 |---|---|---|
